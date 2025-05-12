@@ -1,0 +1,27 @@
+[project]
+name = "manus-backtest"
+version = "0.1.0"
+description = ""
+authors = [
+    {name = "minkaizen",email = "martin.g.cao@gmail.com"}
+]
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "pandas (>=2.2.3,<3.0.0)",
+]
+
+[tool.poetry]
+packages = [{include = "manus_backtest", from = "src"}]
+
+
+[tool.poetry.group.test.dependencies]
+pytest = "^8.3.5"
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.pytest.ini_options]
+python_files = "tests/test_*.py"
+

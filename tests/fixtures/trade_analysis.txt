@@ -1,0 +1,25 @@
+--- Trade Analysis ---
+
+Profit Potential (R-multiples of $100 risk):
+  Trades reaching at least 3R (300.00 profit): 168 (29.37% of trades)
+  Trades reaching at least 5R (500.00 profit): 106 (18.53% of trades)
+  Trades reaching at least 10R (1000.00 profit): 49 (8.57% of trades)
+
+Total P&L by Day of the Week (Entry Day):
+entry_day_of_week
+Sunday       10279.928920
+Monday        5077.533093
+Saturday      3164.070843
+Thursday      2456.076236
+Tuesday       1517.380590
+Friday       -1246.519741
+Wednesday    -1872.769856
+
+Performance by Trade Direction:
+                sum       mean  count
+type                                 
+long    9271.272828  31.969906    290
+short  10104.427258  35.831302    282
+
+Average trades per trading day: 7.43
+Maximum trades in a single day: 28
