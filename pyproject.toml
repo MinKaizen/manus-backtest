@@ -9,10 +9,14 @@ readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
     "pandas (>=2.2.3,<3.0.0)",
+    "pydantic (>=2.11.4,<3.0.0)",
 ]
 
 [tool.poetry]
-packages = [{include = "manus_backtest", from = "src"}]
+packages = [
+    {include = "manus_backtest", from = "src"},
+    {include = "models", from = "src"}
+]
 
 
 [tool.poetry.group.test.dependencies]
