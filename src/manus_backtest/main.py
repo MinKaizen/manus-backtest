@@ -7,6 +7,8 @@ entry signals, stop losses, and fixed risk position sizing.
 import pandas as pd
 import numpy as np
 
+from models.trade import Trade, TradeStatus, TradeType
+
 RISK_AMOUNT_DOLLARS = 100.0
 OUTPUT_CSV_PATH = "./output/trade_results.csv"
 ANALYSIS_OUTPUT_PATH = "./output/trade_analysis.txt"
@@ -167,24 +169,24 @@ def run_backtest(df):
                 exit_price_sl = None
                 current_pnl = 0
 
-                if active_trade['type'] == 'long':
-                    if current_candle.low <= active_trade['stop_price']:
+                if active_trade.type == TradeType.long:
+                    if current_candle.low <= active_trade.stop_price:
                         stop_hit = True
-                        exit_price_sl = active_trade['stop_price']
-                        current_pnl = (exit_price_sl - active_trade['entry_price']) * active_trade['units']
-                elif active_trade['type'] == 'short':
-                    if current_candle.high >= active_trade['stop_price']:
+                        exit_price_sl = active_trade.stop_price
+                        current_pnl = (exit_price_sl - active_trade.entry_price) * active_trade.units
+                elif active_trade.type == TradeType.short:
+                    if current_candle.high >= active_trade.stop_price:
                         stop_hit = True
-                        exit_price_sl = active_trade['stop_price']
-                        current_pnl = (active_trade['entry_price'] - exit_price_sl) * active_trade['units']
+                        exit_price_sl = active_trade.stop_price
+                        current_pnl = (active_trade.entry_price - exit_price_sl) * active_trade.units
 
                 if stop_hit:
-                    active_trade['exit_price'] = exit_price_sl
-                    active_trade['pnl'] = current_pnl
-                    active_trade['status'] = 'Closed (Stop)'
-                    active_trade['exit_time'] = candle_timestamp
-                    current_day_trades_info.append(active_trade.copy())
-                    all_trades_raw.append(active_trade.copy())
+                    active_trade.exit_price = exit_price_sl
+                    active_trade.pnl = current_pnl
+                    active_trade.status = TradeStatus.closed_stop
+                    active_trade.exit_time = candle_timestamp
+                    current_day_trades_info.append(active_trade.model_copy())
+                    all_trades_raw.append(active_trade.model_copy())
                     active_trade = None
 
             # 2. Check for new entry signals if no active trade
@@ -198,64 +200,64 @@ def run_backtest(df):
                 if is_buy_signal:
                     entry_price = current_candle.close
                     stop_price_new_trade = ref_low
-                    trade_type = 'long'
+                    trade_type = TradeType.long
                     if entry_price <= stop_price_new_trade: # Invalid trade condition
                         entry_price = None 
                 elif is_sell_signal:
                     entry_price = current_candle.close
                     stop_price_new_trade = ref_high
-                    trade_type = 'short'
+                    trade_type = TradeType.short
                     if entry_price >= stop_price_new_trade: # Invalid trade condition
                         entry_price = None
                 
-                if entry_price and stop_price_new_trade and trade_type:
+                if entry_price and stop_price_new_trade and trade_type != None:
                     trade_counter_this_day += 1
                     units, value_dollars = calculate_position_size(entry_price, stop_price_new_trade, RISK_AMOUNT_DOLLARS)
                     
                     if units > 0: # Valid position
-                        active_trade = {
-                            'day_date_str': day_str,
-                            'trade_num_day': trade_counter_this_day,
-                            'type': trade_type,
-                            'entry_time': candle_timestamp,
-                            'entry_price': entry_price,
-                            'stop_price': stop_price_new_trade,
-                            'units': units,
-                            'position_value_usd': value_dollars,
-                            'status': 'Open',
-                            'ref_high_active': ref_high, 
-                            'ref_low_active': ref_low,
-                            'max_favorable_excursion_price': entry_price, # For R-multiple analysis
-                            'min_adverse_excursion_price': entry_price,   # For R-multiple analysis
-                            'max_profit_before_close': 0.0 # Initialize max profit
-                        }
+                        active_trade = Trade(
+                            day_date_str = day_str,
+                            trade_num_day = trade_counter_this_day,
+                            type = trade_type,
+                            entry_time = candle_timestamp,
+                            entry_price = entry_price,
+                            stop_price = stop_price_new_trade,
+                            units = units,
+                            position_value_usd = value_dollars,
+                            status = TradeStatus.open,
+                            ref_high_active = ref_high, 
+                            ref_low_active = ref_low,
+                            max_favorable_excursion_price = entry_price, # For R-multiple analysis
+                            min_adverse_excursion_price = entry_price,   # For R-multiple analysis
+                            max_profit_before_close = 0.0 # Initialize max profit
+                        )
                    # Update MFE/MAE and Max Profit Before Close if trade is active
-            if active_trade and active_trade["status"] == "Open":
+            if active_trade and active_trade.status == TradeStatus.open:
                 current_potential_profit = 0
-                if active_trade["type"] == "long":
-                    active_trade["max_favorable_excursion_price"] = max(active_trade["max_favorable_excursion_price"], current_candle.high)
-                    active_trade["min_adverse_excursion_price"] = min(active_trade["min_adverse_excursion_price"], current_candle.low)
-                    current_potential_profit = (current_candle.high - active_trade["entry_price"]) * active_trade["units"]
-                elif active_trade["type"] == "short":
-                    active_trade["max_favorable_excursion_price"] = min(active_trade["max_favorable_excursion_price"], current_candle.low) # Lower price is favorable for short
-                    active_trade["min_adverse_excursion_price"] = max(active_trade["min_adverse_excursion_price"], current_candle.high)
-                    current_potential_profit = (active_trade["entry_price"] - current_candle.low) * active_trade["units"]
-                active_trade["max_profit_before_close"] = max(active_trade.get("max_profit_before_close", 0), current_potential_profit)
+                if active_trade.type == TradeType.long:
+                    active_trade.max_favorable_excursion_price = max(active_trade.max_favorable_excursion_price, current_candle.high)
+                    active_trade.min_adverse_excursion_price = min(active_trade.min_adverse_excursion_price, current_candle.low)
+                    current_potential_profit = (current_candle.high - active_trade.entry_price) * active_trade.units
+                elif active_trade.type == TradeType.short:
+                    active_trade.max_favorable_excursion_price = min(active_trade.max_favorable_excursion_price, current_candle.low) # Lower price is favorable for short
+                    active_trade.min_adverse_excursion_price = max(active_trade.min_adverse_excursion_price, current_candle.high)
+                    current_potential_profit = (active_trade.entry_price - current_candle.low) * active_trade.units
+                active_trade.max_profit_before_close = max((active_trade.max_profit_before_close or 0.0), current_potential_profit)
         # At the end of the day, if there is an active trade, close it
-        if active_trade and active_trade["status"] == "Open": # ADDED THIS CHECK
+        if active_trade and active_trade.status == TradeStatus.open: # ADDED THIS CHECK
             eod_close_price = day_data.iloc[-1].close
             pnl_eod = 0
-            if active_trade["type"] == "long":
-                pnl_eod = (eod_close_price - active_trade["entry_price"]) * active_trade["units"]
-            elif active_trade["type"] == "short": # Use elif for clarity
-                pnl_eod = (active_trade["entry_price"] - eod_close_price) * active_trade["units"]
+            if active_trade.type == TradeType.long:
+                pnl_eod = (eod_close_price - active_trade.entry_price) * active_trade.units
+            elif active_trade.type == TradeType.short:
+                pnl_eod = (active_trade.entry_price - eod_close_price) * active_trade.units
             
-            active_trade["exit_price"] = eod_close_price
-            active_trade["pnl"] = pnl_eod
-            active_trade["status"] = "Closed (EOD)"
-            active_trade["exit_time"] = day_data.index[-1]
-            current_day_trades_info.append(active_trade.copy())
-            all_trades_raw.append(active_trade.copy())
+            active_trade.exit_price = eod_close_price
+            active_trade.pnl = pnl_eod
+            active_trade.status = TradeStatus.closed_eod
+            active_trade.exit_time = day_data.index[-1]
+            current_day_trades_info.append(active_trade.model_copy())
+            all_trades_raw.append(active_trade.model_copy())
             active_trade = None # Reset active trade after closing EOD
 
         daily_results_for_table.append({
@@ -287,15 +289,15 @@ def format_results_to_table(daily_results):
         for i in range(max_trades_per_day):
             if i < len(day_res['Trades_Info']):
                 trade = day_res['Trades_Info'][i]
-                row[f'Trade_{i+1}_Entry_Time'] = trade['entry_time'].strftime('%H:%M:%S') if pd.notnull(trade['entry_time']) else None
-                row[f'Trade_{i+1}_Type'] = trade['type']
-                row[f'Trade_{i+1}_Entry_Price'] = trade['entry_price']
-                row[f'Trade_{i+1}_Stop_Price'] = trade['stop_price']
-                row[f'Trade_{i+1}_Pos_Size_USD'] = trade.get('position_value_usd', np.nan)
-                row[f"Trade_{i+1}_Pos_Size_Units"] = trade.get("units", np.nan)
-                row[f"Trade_{i+1}_Max_Profit_Before_Close"] = trade.get("max_profit_before_close", np.nan) # ADDED
-                row[f"Trade_{i+1}_Result_EOD_PNL"] = trade.get("pnl", np.nan)
-                row[f"Trade_{i+1}_Status"] = trade.get("status", "")
+                row[f'Trade_{i+1}_Entry_Time'] = trade.entry_time.strftime('%H:%M:%S') if pd.notnull(trade.entry_time) else None
+                row[f'Trade_{i+1}_Type'] = trade.type
+                row[f'Trade_{i+1}_Entry_Price'] = trade.entry_price
+                row[f'Trade_{i+1}_Stop_Price'] = trade.stop_price
+                row[f'Trade_{i+1}_Pos_Size_USD'] = trade.position_value_usd or np.nan
+                row[f"Trade_{i+1}_Pos_Size_Units"] = trade.units or np.nan
+                row[f"Trade_{i+1}_Max_Profit_Before_Close"] = trade.max_profit_before_close or 0.0
+                row[f"Trade_{i+1}_Result_EOD_PNL"] = trade.pnl or 0.0
+                row[f"Trade_{i+1}_Status"] = trade.status.value or ""
             else:
                 row[f'Trade_{i+1}_Entry_Time'] = None
                 row[f'Trade_{i+1}_Type'] = None
@@ -320,14 +322,14 @@ def perform_analysis(all_trades_raw, risk_per_trade_fixed=RISK_AMOUNT_DOLLARS):
     # R-multiple analysis (3x, 5x, 10x risk)
     r_multiples_achieved = {3: 0, 5: 0, 10: 0}
     for trade in all_trades_raw:
-        if trade['status'] not in ['Closed (Stop)', 'Closed (EOD)']: # Should not happen if logic is correct
+        if trade.status not in [TradeStatus.closed_stop, TradeStatus.closed_eod]: # Should not happen if logic is correct
             continue
         
         potential_profit = 0
-        if trade['type'] == 'long':
-            potential_profit = (trade['max_favorable_excursion_price'] - trade['entry_price']) * trade['units']
-        elif trade['type'] == 'short':
-            potential_profit = (trade['entry_price'] - trade['max_favorable_excursion_price']) * trade['units']
+        if trade.type == TradeType.long:
+            potential_profit = (trade.max_favorable_excursion_price - trade.entry_price) * trade.units
+        elif trade.type == TradeType.short:
+            potential_profit = (trade.entry_price - trade.max_favorable_excursion_price) * trade.units
 
         for r_val in r_multiples_achieved.keys():
             if potential_profit >= r_val * risk_per_trade_fixed:
@@ -338,7 +340,13 @@ def perform_analysis(all_trades_raw, risk_per_trade_fixed=RISK_AMOUNT_DOLLARS):
         analysis_lines.append(f"  Trades reaching at least {r_val}R ({r_val*risk_per_trade_fixed:.2f} profit): {count} ({(count/len(all_trades_raw)*100 if len(all_trades_raw)>0 else 0):.2f}% of trades)")
 
     # Day of the week analysis
-    trades_df = pd.DataFrame(all_trades_raw)
+    # trades_df = pd.DataFrame(all_trades_raw)
+    trades_df = pd.DataFrame([{
+        **trade.__dict__,
+        "type": trade.type.value or "",
+        "status": trade.status.value or "",
+    } for trade in all_trades_raw])
+
     if not trades_df.empty and 'entry_time' in trades_df.columns:
         trades_df['entry_day_of_week'] = trades_df['entry_time'].dt.day_name()
         pnl_by_dow = trades_df.groupby('entry_day_of_week')['pnl'].sum().sort_values(ascending=False)
@@ -399,7 +407,7 @@ if __name__ == "__main__":
                         avg_pnl_by_nth_trade = trades_df_for_cap_analysis.groupby('trade_num_in_day')['pnl'].agg(['mean', 'sum', 'count'])
                         analysis_lines.append("\nAverage P&L by Nth trade of the day (across all days):")
                         for index, row_nth_trade in avg_pnl_by_nth_trade.iterrows():
-                            analysis_lines.append(f"  Trade #{index}: Avg P&L {row_nth_trade['mean']:.2f} (Total P&L: {row_nth_trade['sum']:.2f}, Count: {row_nth_trade['count']})")
+                            analysis_lines.append(f"  Trade #{index}: Avg P&L {row_nth_trade.mean:.2f} (Total P&L: {row_nth_trade.sum:.2f}, Count: {row_nth_trade.count})")
 
                         analysis_lines.append("\nCumulative P&L if stopping after N trades per day:")
                         max_trades_observed_in_any_day = trades_df_for_cap_analysis['trade_num_in_day'].max() if not trades_df_for_cap_analysis.empty else 0
