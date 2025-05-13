@@ -274,40 +274,25 @@ def format_results_to_table(daily_results):
     if not daily_results:
         return pd.DataFrame()
 
-    # Determine max number of trades in a day for table columns
-    max_trades_per_day = 0
-    for day_res in daily_results:
-        max_trades_per_day = max(max_trades_per_day, len(day_res['Trades_Info']))
-
     table_data = []
     for day_res in daily_results:
-        row = {
-            'Day': day_res['Day'],
-            'Reference_High': day_res['Ref_High'],
-            'Reference_Low': day_res['Ref_Low']
-        }
-        for i in range(max_trades_per_day):
-            if i < len(day_res['Trades_Info']):
-                trade = day_res['Trades_Info'][i]
-                row[f'Trade_{i+1}_Entry_Time'] = trade.entry_time.strftime('%H:%M:%S') if pd.notnull(trade.entry_time) else None
-                row[f'Trade_{i+1}_Type'] = trade.type
-                row[f'Trade_{i+1}_Entry_Price'] = trade.entry_price
-                row[f'Trade_{i+1}_Stop_Price'] = trade.stop_price
-                row[f'Trade_{i+1}_Pos_Size_USD'] = trade.position_value_usd or np.nan
-                row[f"Trade_{i+1}_Pos_Size_Units"] = trade.units or np.nan
-                row[f"Trade_{i+1}_Max_Profit_Before_Close"] = trade.max_profit_before_close or 0.0
-                row[f"Trade_{i+1}_Result_EOD_PNL"] = trade.pnl or 0.0
-                row[f"Trade_{i+1}_Status"] = trade.status.value or ""
-            else:
-                row[f'Trade_{i+1}_Entry_Time'] = None
-                row[f'Trade_{i+1}_Type'] = None
-                row[f'Trade_{i+1}_Entry_Price'] = None
-                row[f'Trade_{i+1}_Stop_Price'] = None
-                row[f'Trade_{i+1}_Pos_Size_USD'] = None
-                row[f'Trade_{i+1}_Pos_Size_Units'] = None
-                row[f'Trade_{i+1}_Result_EOD_PNL'] = None
-                row[f'Trade_{i+1}_Status'] = None
-        table_data.append(row)
+        for i in range(len(day_res['Trades_Info'])):
+            row = {
+                'Day': day_res['Day'],
+                'Reference_High': day_res['Ref_High'],
+                'Reference_Low': day_res['Ref_Low'],
+                'Trade_Number': i,
+            }
+            trade = day_res['Trades_Info'][i]
+            row[f'Type'] = trade.type
+            row[f'Entry_Price'] = trade.entry_price
+            row[f'Stop_Price'] = trade.stop_price
+            row[f'Pos_Size_USD'] = trade.position_value_usd or np.nan
+            row[f"Pos_Size_Units"] = trade.units or np.nan
+            row[f"Max_Profit_Before_Close"] = trade.max_profit_before_close or 0.0
+            row[f"Result_EOD_PNL"] = trade.pnl or 0.0
+            row[f"Status"] = trade.status.value or ""
+            table_data.append(row)
     
     return pd.DataFrame(table_data)
 
