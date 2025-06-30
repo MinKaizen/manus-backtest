@@ -6,6 +6,7 @@ entry signals, stop losses, and fixed risk position sizing.
 """
 import pandas as pd
 
+from indicators.BCERefs import BCERefsIndicator
 from models.trade import Trade, TradeStatus, TradeType, create_trade
 from models.daily_result import DailyResult
 from models.backtest_config import BacktestConfig
@@ -99,33 +100,6 @@ def load_data(filepath):
         print("Error: Suitable timestamp column ('time', 'unix', or 'timestamp') not found or could not be parsed.")
         return None
 
-def calculate_reference_levels(first_candle: OHLCCandle) -> tuple[float, float]:
-    """Calculates reference high and low based on the first candle of the day."""
-    o, h, l, c = first_candle.open, first_candle.high, first_candle.low, first_candle.close
-
-    ref_high, ref_low = None, None
-
-    # Rule: if the distance between open/close is less than 0.05%
-    # Assuming 0.05% of the open price. Add check for open > 0.
-    use_hl_for_ref = False
-    if o > 0:
-        if abs(o - c) / o < 0.0005:
-            use_hl_for_ref = True
-    else: # If open is 0, perhaps default to using H/L
-        use_hl_for_ref = True 
-
-    if use_hl_for_ref:
-        ref_high = h
-        ref_low = l
-    else:
-        if c > o:  # Up candle
-            ref_high = c
-            ref_low = o
-        else:  # Down candle or equal
-            ref_high = o
-            ref_low = c
-    return ref_high, ref_low
-
 def calculate_position_size(entry_price: float, stop_price: float, risk_amount_dollars: float) -> tuple[float, float]:
     """Calculates position size in units and dollar value."""
     if entry_price is None or stop_price is None:
@@ -148,6 +122,8 @@ def run_backtest(df: pd.DataFrame) -> tuple[list[DailyResult], list[Trade]]:
     all_trades_raw = [] # For detailed analysis
     daily_results_for_table = []
 
+    bcerefs = BCERefsIndicator(df)
+
     # Group data by day (UTC midnight to midnight)
     # Resample to ensure we get all days, then group by date part
     # This handles days with no trades as well.
@@ -164,16 +140,9 @@ def run_backtest(df: pd.DataFrame) -> tuple[list[DailyResult], list[Trade]]:
         active_trade = None
         trade_counter_this_day = 0
 
-        first_candle_data = day_data.iloc[0]
-        first_candle = OHLCCandle(
-            open=first_candle_data.open,
-            high=first_candle_data.high,
-            low=first_candle_data.low,
-            close=first_candle_data.close
-        )
-        ref_high, ref_low = calculate_reference_levels(first_candle)
-
         for candle_timestamp, current_candle in day_data.iterrows():
+            ref_high, ref_low = bcerefs.value(candle_timestamp.timestamp())
+
             # 1. Manage existing trade (check for stop loss)
             if active_trade:
                 stop_hit = False
@@ -267,6 +236,7 @@ def run_backtest(df: pd.DataFrame) -> tuple[list[DailyResult], list[Trade]]:
             all_trades_raw.append(active_trade.model_copy())
             active_trade = None # Reset active trade after closing EOD
 
+        ref_high, ref_low = bcerefs.value(day_date.timestamp())
         daily_result = DailyResult(
             Day=day_str,
             Ref_High=ref_high,
