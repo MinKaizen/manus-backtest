@@ -5,15 +5,19 @@ This script backtests a specific trading strategy based on daily reference candl
 entry signals, stop losses, and fixed risk position sizing.
 """
 import pandas as pd
-import numpy as np
 
-from models.trade import Trade, TradeStatus, TradeType
+from models.trade import Trade, TradeStatus, TradeType, create_trade
+from models.daily_result import DailyResult
+from models.backtest_config import BacktestConfig
+from models.ohlc_candle import OHLCCandle
 from manus_backtest.reports import BacktestReporter
 
-RISK_AMOUNT_DOLLARS = 100.0
-OUTPUT_CSV_PATH = "./output/trade_results.csv"
-ANALYSIS_OUTPUT_PATH = "./output/trade_analysis.txt"
-DATA_FILEPATH = "./BTCUSDT_OHLC.csv"
+config = BacktestConfig(
+    risk_amount_dollars=100.0,
+    output_csv_path="./output/trade_results.csv",
+    analysis_output_path="./output/trade_analysis.txt",
+    data_filepath="./BTCUSDT_OHLC.csv"
+)
 
 def load_data(filepath):
     """Loads OHLC data from CSV and prepares it."""
@@ -95,7 +99,7 @@ def load_data(filepath):
         print("Error: Suitable timestamp column ('time', 'unix', or 'timestamp') not found or could not be parsed.")
         return None
 
-def calculate_reference_levels(first_candle):
+def calculate_reference_levels(first_candle: OHLCCandle) -> tuple[float, float]:
     """Calculates reference high and low based on the first candle of the day."""
     o, h, l, c = first_candle.open, first_candle.high, first_candle.low, first_candle.close
 
@@ -122,7 +126,7 @@ def calculate_reference_levels(first_candle):
             ref_low = c
     return ref_high, ref_low
 
-def calculate_position_size(entry_price, stop_price, risk_amount_dollars):
+def calculate_position_size(entry_price: float, stop_price: float, risk_amount_dollars: float) -> tuple[float, float]:
     """Calculates position size in units and dollar value."""
     if entry_price is None or stop_price is None:
         return 0, 0
@@ -135,7 +139,7 @@ def calculate_position_size(entry_price, stop_price, risk_amount_dollars):
     position_value_dollars = position_size_units * entry_price
     return position_size_units, position_value_dollars
 
-def run_backtest(df):
+def run_backtest(df: pd.DataFrame) -> tuple[list[DailyResult], list[Trade]]:
     """Runs the backtesting simulation."""
     if df is None or df.empty:
         print("Dataframe is empty, cannot run backtest.")
@@ -160,7 +164,13 @@ def run_backtest(df):
         active_trade = None
         trade_counter_this_day = 0
 
-        first_candle = day_data.iloc[0]
+        first_candle_data = day_data.iloc[0]
+        first_candle = OHLCCandle(
+            open=first_candle_data.open,
+            high=first_candle_data.high,
+            low=first_candle_data.low,
+            close=first_candle_data.close
+        )
         ref_high, ref_low = calculate_reference_levels(first_candle)
 
         for candle_timestamp, current_candle in day_data.iterrows():
@@ -213,24 +223,20 @@ def run_backtest(df):
                 
                 if entry_price and stop_price_new_trade and trade_type != None:
                     trade_counter_this_day += 1
-                    units, value_dollars = calculate_position_size(entry_price, stop_price_new_trade, RISK_AMOUNT_DOLLARS)
+                    units, value_dollars = calculate_position_size(entry_price, stop_price_new_trade, config.risk_amount_dollars)
                     
                     if units > 0: # Valid position
-                        active_trade = Trade(
-                            day_date_str = day_str,
-                            trade_num_day = trade_counter_this_day,
-                            type = trade_type,
-                            entry_time = candle_timestamp,
-                            entry_price = entry_price,
-                            stop_price = stop_price_new_trade,
-                            units = units,
-                            position_value_usd = value_dollars,
-                            status = TradeStatus.open,
-                            ref_high_active = ref_high, 
-                            ref_low_active = ref_low,
-                            max_favorable_excursion_price = entry_price, # For R-multiple analysis
-                            min_adverse_excursion_price = entry_price,   # For R-multiple analysis
-                            max_profit_before_close = 0.0 # Initialize max profit
+                        active_trade = create_trade(
+                            day_date_str=day_str,
+                            trade_num_day=trade_counter_this_day,
+                            trade_type=trade_type,
+                            entry_time=candle_timestamp,
+                            entry_price=entry_price,
+                            stop_price=stop_price_new_trade,
+                            units=units,
+                            position_value_usd=value_dollars,
+                            ref_high_active=ref_high,
+                            ref_low_active=ref_low
                         )
                    # Update MFE/MAE and Max Profit Before Close if trade is active
             if active_trade and active_trade.status == TradeStatus.open:
@@ -261,36 +267,32 @@ def run_backtest(df):
             all_trades_raw.append(active_trade.model_copy())
             active_trade = None # Reset active trade after closing EOD
 
-        daily_results_for_table.append({
-            'Day': day_str,
-            'Ref_High': ref_high,
-            'Ref_Low': ref_low,
-            'Trades_Info': current_day_trades_info
-        })
+        daily_result = DailyResult(
+            Day=day_str,
+            Ref_High=ref_high,
+            Ref_Low=ref_low,
+            Trades_Info=current_day_trades_info
+        )
+        daily_results_for_table.append(daily_result)
 
     return daily_results_for_table, all_trades_raw
 
-
-
-
-
-
 if __name__ == "__main__":
-    print(f"Loading data from {DATA_FILEPATH}...")
-    df_ohlc = load_data(DATA_FILEPATH)
+    print(f"Loading data from {config.data_filepath}...")
+    df_ohlc = load_data(config.data_filepath)
 
     if df_ohlc is not None and not df_ohlc.empty:
         print("Running backtest...")
         daily_summary, raw_trades = run_backtest(df_ohlc.copy())
         
         # Initialize reporter
-        reporter = BacktestReporter(risk_amount_dollars=RISK_AMOUNT_DOLLARS)
+        reporter = BacktestReporter(risk_amount_dollars=config.risk_amount_dollars)
         
         # Print reports to console
         reporter.print_reports(daily_summary, raw_trades)
         
         # Save reports to files
-        reporter.save_reports(daily_summary, raw_trades, OUTPUT_CSV_PATH, ANALYSIS_OUTPUT_PATH)
+        reporter.save_reports(daily_summary, raw_trades, config.output_csv_path, config.analysis_output_path)
     else:
         print("Failed to load data or data is empty. Backtest aborted.")
 

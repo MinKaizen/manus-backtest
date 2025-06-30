@@ -8,9 +8,10 @@ This module handles all report generation functionality including:
 """
 import pandas as pd
 import numpy as np
-from typing import List, Dict, Any
+from typing import List
 
 from models.trade import Trade, TradeStatus, TradeType
+from models.daily_result import DailyResult
 
 
 class BacktestReporter:
@@ -19,21 +20,21 @@ class BacktestReporter:
     def __init__(self, risk_amount_dollars: float = 100.0):
         self.risk_amount_dollars = risk_amount_dollars
     
-    def format_results_to_table(self, daily_results: List[Dict[str, Any]]) -> pd.DataFrame:
+    def format_results_to_table(self, daily_results: List[DailyResult]) -> pd.DataFrame:
         """Formats the daily results into a pandas DataFrame as requested."""
         if not daily_results:
             return pd.DataFrame()
 
         table_data = []
         for day_res in daily_results:
-            for i in range(len(day_res['Trades_Info'])):
+            for i in range(len(day_res.Trades_Info)):
                 row = {
-                    'Day': day_res['Day'],
-                    'Reference_High': day_res['Ref_High'],
-                    'Reference_Low': day_res['Ref_Low'],
+                    'Day': day_res.Day,
+                    'Reference_High': day_res.Ref_High,
+                    'Reference_Low': day_res.Ref_Low,
                     'Trade_Number': i,
                 }
-                trade = day_res['Trades_Info'][i]
+                trade = day_res.Trades_Info[i]
                 row[f'Type'] = trade.type
                 row[f'Entry_Price'] = trade.entry_price
                 row[f'Stop_Price'] = trade.stop_price
@@ -163,7 +164,7 @@ class BacktestReporter:
 
         return "\n".join(analysis_lines)
 
-    def save_reports(self, daily_results: List[Dict[str, Any]], all_trades_raw: List[Trade], 
+    def save_reports(self, daily_results: List[DailyResult], all_trades_raw: List[Trade], 
                     csv_output_path: str, analysis_output_path: str) -> None:
         """Saves both CSV and analysis reports to files."""
         # Save CSV report
@@ -186,7 +187,7 @@ class BacktestReporter:
             except Exception as e:
                 print(f"Error saving analysis to file: {e}")
 
-    def print_reports(self, daily_results: List[Dict[str, Any]], all_trades_raw: List[Trade]) -> None:
+    def print_reports(self, daily_results: List[DailyResult], all_trades_raw: List[Trade]) -> None:
         """Prints reports to console."""
         if daily_results:
             print("\n--- Daily Trade Summary Table ---")
