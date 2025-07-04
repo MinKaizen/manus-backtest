@@ -8,6 +8,7 @@ This module handles all report generation functionality including:
 """
 import pandas as pd
 import numpy as np
+import os
 from typing import List
 
 from models.trade import Trade, TradeStatus, TradeType
@@ -167,6 +168,15 @@ class BacktestReporter:
     def save_reports(self, daily_results: List[DailyResult], all_trades_raw: List[Trade], 
                     csv_output_path: str, analysis_output_path: str) -> None:
         """Saves both CSV and analysis reports to files."""
+        # Create output directories if they don't exist
+        csv_dir = os.path.dirname(csv_output_path)
+        if csv_dir and not os.path.exists(csv_dir):
+            os.makedirs(csv_dir, exist_ok=True)
+        
+        analysis_dir = os.path.dirname(analysis_output_path)
+        if analysis_dir and not os.path.exists(analysis_dir):
+            os.makedirs(analysis_dir, exist_ok=True)
+        
         # Save CSV report
         if daily_results:
             results_table_df = self.format_results_to_table(daily_results)
