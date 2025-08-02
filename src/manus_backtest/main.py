@@ -236,7 +236,8 @@ def run_backtest(df: pd.DataFrame) -> tuple[list[DailyResult], list[Trade]]:
             all_trades_raw.append(active_trade.model_copy())
             active_trade = None # Reset active trade after closing EOD
 
-        ref_high, ref_low = bcerefs.value(day_date.timestamp())
+        first_candle_timestamp = day_data.index[0].timestamp()
+        ref_high, ref_low = bcerefs.value(first_candle_timestamp)
         daily_result = DailyResult(
             Day=day_str,
             Ref_High=ref_high,
