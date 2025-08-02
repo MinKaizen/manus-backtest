@@ -1,5 +1,6 @@
 # Project specific stuff
 /output/
+/input/
 /ignore/
 
 # Byte-compiled / optimized / DLL files
