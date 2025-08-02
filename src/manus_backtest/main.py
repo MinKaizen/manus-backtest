@@ -5,6 +5,9 @@ This script backtests a specific trading strategy based on daily reference candl
 entry signals, stop losses, and fixed risk position sizing.
 """
 import pandas as pd
+import os
+import glob
+from pathlib import Path
 
 from indicators.BCERefs import BCERefsIndicator
 from models.trade import Trade, TradeStatus, TradeType, create_trade
@@ -248,22 +251,69 @@ def run_backtest(df: pd.DataFrame) -> tuple[list[DailyResult], list[Trade]]:
 
     return daily_results_for_table, all_trades_raw
 
-if __name__ == "__main__":
-    print(f"Loading data from {config.data_filepath}...")
-    df_ohlc = load_data(config.data_filepath)
+def process_single_file(filepath: str, output_dir: str = "./output") -> bool:
+    """Process a single CSV file and generate reports."""
+    filename = Path(filepath).stem
+    print(f"Loading data from {filepath}...")
+    df_ohlc = load_data(filepath)
 
     if df_ohlc is not None and not df_ohlc.empty:
-        print("Running backtest...")
+        print(f"Running backtest for {filename}...")
         daily_summary, raw_trades = run_backtest(df_ohlc.copy())
         
         # Initialize reporter
         reporter = BacktestReporter(risk_amount_dollars=config.risk_amount_dollars)
         
         # Print reports to console
+        print(f"\n=== RESULTS FOR {filename.upper()} ===")
         reporter.print_reports(daily_summary, raw_trades)
         
+        # Generate output filenames based on input filename
+        output_csv_path = f"{output_dir}/trade_results_{filename}.csv"
+        analysis_output_path = f"{output_dir}/trade_analysis_{filename}.txt"
+        
         # Save reports to files
-        reporter.save_reports(daily_summary, raw_trades, config.output_csv_path, config.analysis_output_path)
+        reporter.save_reports(daily_summary, raw_trades, output_csv_path, analysis_output_path)
+        print(f"Reports saved: {output_csv_path}, {analysis_output_path}")
+        return True
     else:
-        print("Failed to load data or data is empty. Backtest aborted.")
+        print(f"Failed to load data from {filepath} or data is empty. Skipping.")
+        return False
+
+if __name__ == "__main__":
+    # Get the project root directory (two levels up from this file)
+    current_dir = Path.cwd()
+    if current_dir.name == "src":
+        project_root = current_dir.parent
+    elif (current_dir / "src").exists():
+        project_root = current_dir
+    else:
+        project_root = Path(__file__).parent.parent.parent
+    
+    input_dir = project_root / "input"
+    output_dir = project_root / "output"
+    
+    # Ensure output directory exists
+    os.makedirs(output_dir, exist_ok=True)
+    
+    # Find all CSV files in input directory
+    csv_files = glob.glob(str(input_dir / "*.csv"))
+    
+    if not csv_files:
+        print(f"No CSV files found in {input_dir} directory.")
+        print("Please place your CSV files in the input folder and try again.")
+    else:
+        print(f"Found {len(csv_files)} CSV file(s) in {input_dir}:")
+        for file in csv_files:
+            print(f"  - {os.path.basename(file)}")
+        
+        print("\nProcessing files...")
+        successful_runs = 0
+        
+        for csv_file in csv_files:
+            if process_single_file(csv_file, str(output_dir)):
+                successful_runs += 1
+            print("-" * 50)
+        
+        print(f"\nCompleted processing {successful_runs}/{len(csv_files)} files successfully.")
 
