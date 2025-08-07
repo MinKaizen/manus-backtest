@@ -264,10 +264,6 @@ def process_single_file(filepath: str, output_dir: str = "./output") -> bool:
         # Initialize reporter
         reporter = BacktestReporter(risk_amount_dollars=config.risk_amount_dollars)
         
-        # Print reports to console
-        print(f"\n=== RESULTS FOR {filename.upper()} ===")
-        reporter.print_reports(daily_summary, raw_trades)
-        
         # Generate output filenames based on input filename
         output_csv_path = f"{output_dir}/trade_results_{filename}.csv"
         analysis_output_path = f"{output_dir}/trade_analysis_{filename}.txt"
