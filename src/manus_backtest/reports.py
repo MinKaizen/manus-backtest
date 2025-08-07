@@ -37,6 +37,7 @@ class BacktestReporter:
                 }
                 trade = day_res.Trades_Info[i]
                 row[f'Type'] = trade.type
+                row[f'Entry_Time'] = trade.entry_time.strftime('%H:%M:%S') if trade.entry_time else ""
                 row[f'Entry_Price'] = trade.entry_price
                 row[f'Stop_Price'] = trade.stop_price
                 row[f'Pos_Size_USD'] = trade.position_value_usd or np.nan
