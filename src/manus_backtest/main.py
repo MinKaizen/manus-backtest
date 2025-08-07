@@ -7,7 +7,9 @@ entry signals, stop losses, and fixed risk position sizing.
 import pandas as pd
 import os
 import glob
+import time
 from pathlib import Path
+from concurrent.futures import ProcessPoolExecutor, as_completed
 
 from indicators.BCERefs import BCERefsIndicator
 from models.trade import Trade, TradeStatus, TradeType, create_trade
@@ -303,13 +305,30 @@ if __name__ == "__main__":
         for file in csv_files:
             print(f"  - {os.path.basename(file)}")
         
-        print("\nProcessing files...")
+        print("\nProcessing files in parallel...")
+        start_time = time.time()
         successful_runs = 0
         
-        for csv_file in csv_files:
-            if process_single_file(csv_file, str(output_dir)):
-                successful_runs += 1
-            print("-" * 50)
+        with ProcessPoolExecutor() as executor:
+            future_to_file = {executor.submit(process_single_file, csv_file, str(output_dir)): csv_file for csv_file in csv_files}
+            
+            for future in as_completed(future_to_file):
+                csv_file = future_to_file[future]
+                filename = os.path.basename(csv_file)
+                try:
+                    result = future.result()
+                    if result:
+                        successful_runs += 1
+                        print(f"✓ Completed processing {filename}")
+                    else:
+                        print(f"✗ Failed to process {filename}")
+                except Exception as exc:
+                    print(f"✗ {filename} generated an exception: {exc}")
+                print("-" * 50)
         
-        print(f"\nCompleted processing {successful_runs}/{len(csv_files)} files successfully.")
+        end_time = time.time()
+        execution_time_ms = (end_time - start_time) * 1000
+        
+        print(f"\nCompleted {successful_runs}/{len(csv_files)} files successfully.")
+        print(f"Time elapsed: {execution_time_ms:.2f} milliseconds")
 
